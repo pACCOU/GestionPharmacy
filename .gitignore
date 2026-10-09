@@ -1,0 +1,27 @@
+# Visual Studio / .NET build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+.vs/
+*.user
+*.suo
+*.cache
+*.pdb
+*.log
+packages/
+!packages/build/
+*.nupkg
+TestResults/
+publish/
+_UpgradeReport_Files/
+UpgradeLog*.*
+
+# SQL / local databases
+*.mdf
+*.ldf
+*.sdf
+*.accdb
+
+# Secrets / local config
+text_serveur.txt
