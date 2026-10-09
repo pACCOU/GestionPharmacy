@@ -1,12 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Data.SqlClient;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System;
 using System.Windows.Forms;
 
 namespace GestionPharmacy
@@ -17,7 +9,6 @@ namespace GestionPharmacy
         {
             InitializeComponent();
         }
-        SqlConnection Con = new SqlConnection(@"Data Source=(LocalDB) \ MSSQLLocalDB;AttachDbFilename=C:\Users\admin\Documents\MaPharmacie.mdf; Integrated Security=True; Connect Timeout=30");
 
         private void closeLbl_Click(object sender, EventArgs e)
         {
@@ -26,42 +17,45 @@ namespace GestionPharmacy
 
         private void passwordTb_TextChanged(object sender, EventArgs e)
         {
-
         }
 
         private void connexionBtn_Click(object sender, EventArgs e)
         {
-            if (userNameTb.Text == "" || passwordTb.Text == "")
+            if (userNameTb.Text.Trim() == "" || passwordTb.Text == "")
             {
-                MessageBox.Show("Entrer Un Nom d'Utilisateur et Mot de Passe");
+                MessageBox.Show("Entrer un nom d'utilisateur et un mot de passe");
+                return;
             }
-            else
+
+            try
             {
-                Con.Open();
-                SqlDataAdapter sda = new SqlDataAdapter("Select count(*) from AgentTbl where AgNom = '" + userNameTb.Text + "' AND AgPass= '" + passwordTb + "'", Con);
-                DataTable dt = new DataTable();
-                sda.Fill(dt);
-                if (dt.Rows[0][0].ToString() == "1")
+                // Bug d'origine : la requête comparait le mot de passe au contrôle
+                // (passwordTb) et non à son texte, la connexion échouait toujours.
+                int n = Convert.ToInt32(Db.Scalar(
+                    "SELECT COUNT(*) FROM AgentTbl WHERE AgNom = @nom AND AgPdw = @pwd",
+                    Db.P("@nom", userNameTb.Text.Trim()),
+                    Db.P("@pwd", passwordTb.Text)));
+
+                if (n == 1)
                 {
-                    Medicaments Med = new Medicaments();
-                    Med.Show();
+                    new Medicaments().Show();
                     this.Hide();
-                    Con.Close();
                 }
                 else
                 {
-                    MessageBox.Show("Mot de Passe Incorrect");
+                    MessageBox.Show("Nom d'utilisateur ou mot de passe incorrect");
                 }
-                Con.Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Impossible de se connecter à la base : " + ex.Message);
             }
         }
 
         private void label2_Click(object sender, EventArgs e)
         {
-            Admin admin = new Admin();
-            admin.Show();
+            new Admin().Show();
             this.Hide();
-            Con.Close();
         }
     }
 }
