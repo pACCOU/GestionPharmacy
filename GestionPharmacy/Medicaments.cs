@@ -1,171 +1,167 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Data.SqlClient;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System;
 using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace GestionPharmacy
 {
     public partial class Medicaments : Form
     {
+        private int cle = 0;   // MedNum de la ligne sélectionnée (0 = aucune)
+
         public Medicaments()
         {
             InitializeComponent();
             afficher();
+            remplirFabricants();
             reinitialiser();
-            RemplirMed();
         }
-        SqlConnection Con = new SqlConnection(@"Data Source=(LocalDB) \ MSSQLLocalDB;AttachDbFilename=C:\Users\admin\Documents\MaPharmacie.mdf; Integrated Security=True; Connect Timeout=30");
+
         private void reinitialiser()
         {
-
             nomMedTb.Text = "";
             prixMedTb.Text = "";
             qteMedTb.Text = "";
-            fabMedCbx.Text = "";
-            expMedDate.Text = "";
-            Cle = 0;
+            fabMedCbx.SelectedIndex = -1;
+            expMedDate.Value = DateTime.Today;
+            cle = 0;
         }
+
         private void afficher()
         {
-            Con.Open();
-            string Req = "Select * From MedicamentTbl";
-            SqlDataAdapter sda = new SqlDataAdapter(Req, Con);
-            SqlCommandBuilder builder = new SqlCommandBuilder(sda);
-            var ds = new DataSet();
-            sda.Fill(ds);
-            medicamentsDGV.DataSource = ds.Tables[0];
-            Con.Close();
-        }
-        private void RemplirMed() {
-            Con.Open();
-            SqlCommand cmd = new SqlCommand("Select MedNum From MedicamentTbl", Con);
-            SqlDataReader Rdr;
-            Rdr = cmd.ExecuteReader();
-            DataTable dt = new DataTable();
-            dt.Columns.Add("MedNum", typeof(int));
-            dt.Load(Rdr);
-            fabMedCbx.ValueMember = "MedNum";
-            fabMedCbx.DataSource = dt;
-            Con.Close();
-
+            try
+            {
+                medicamentsDGV.DataSource = Db.Table(
+                    "SELECT MedNum, MedNom, MedPrix, MedQte, MedFab, MedExp FROM MedicamentTbl ORDER BY MedNom");
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
 
-        private void guna2Button2_Click(object sender, EventArgs e)
+        /// <summary>
+        /// Bug d'origine : la liste déroulante "fabricant" était remplie avec les
+        /// numéros de médicaments. Elle liste maintenant les fabricants par nom.
+        /// </summary>
+        private void remplirFabricants()
         {
-            if (nomMedTb.Text == "" || prixMedTb.Text == "" || qteMedTb.Text == "" || fabMedCbx.SelectedIndex == -1)
+            try
             {
-                MessageBox.Show("Information Manquante");
+                var dt = Db.Table("SELECT FabNum, FabNom FROM FabricantTbl ORDER BY FabNom");
+                fabMedCbx.DisplayMember = "FabNom";
+                fabMedCbx.ValueMember = "FabNum";
+                fabMedCbx.DataSource = dt;
             }
-            else
-            {
-                try
-                {
-                    Con.Open();
-                    string Req = "Update MedicamentTbl set MedNom='" + nomMedTb.Text + "', MedPrix='" + prixMedTb.Text + "', MedQte='" + qteMedTb.Text + "', MedFab='" + fabMedCbx.SelectedValue.ToString() + "'";
-                    SqlCommand cmd = new SqlCommand(Req, Con);
-                    cmd.ExecuteNonQuery();
-                    MessageBox.Show("Médicaments Modifié Avec succes");
-
-                    Con.Close();
-                    afficher();
-                    reinitialiser();
-                }
-                catch (Exception Ex)
-                {
-                    MessageBox.Show(Ex.Message);
-                }
-            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
+
+        private bool champsValides(out decimal prix, out int qte)
+        {
+            prix = 0; qte = 0;
+            if (nomMedTb.Text.Trim() == "" || fabMedCbx.SelectedIndex == -1)
+            {
+                MessageBox.Show("Complétez les informations manquantes");
+                return false;
+            }
+            if (!decimal.TryParse(prixMedTb.Text, out prix) || prix < 0)
+            {
+                MessageBox.Show("Prix invalide");
+                return false;
+            }
+            if (!int.TryParse(qteMedTb.Text, out qte) || qte < 0)
+            {
+                MessageBox.Show("Quantité invalide");
+                return false;
+            }
+            return true;
+        }
+
         private void ajouterBtn_Click(object sender, EventArgs e)
         {
-            if (nomMedTb.Text == "" || prixMedTb.Text == "" || qteMedTb.Text == "" || fabMedCbx.SelectedIndex == -1)
+            decimal prix; int qte;
+            if (!champsValides(out prix, out qte)) return;
+            try
             {
-                MessageBox.Show("Completez les Informations Manquantes");
+                Db.Execute(
+                    "INSERT INTO MedicamentTbl (MedNom, MedPrix, MedQte, MedFab, MedExp) VALUES (@nom, @prix, @qte, @fab, @exp)",
+                    Db.P("@nom", nomMedTb.Text.Trim()),
+                    Db.P("@prix", prix),
+                    Db.P("@qte", qte),
+                    Db.P("@fab", Convert.ToInt32(fabMedCbx.SelectedValue)),
+                    Db.P("@exp", expMedDate.Value.Date));
+                MessageBox.Show("Médicament ajouté avec succès");
+                afficher();
+                reinitialiser();
             }
-            else
-            {
-                try
-                {
-                    Con.Open();
-                    string Req = "Insert into MedicamentTbl values( '" + nomMedTb.Text + "', '" + prixMedTb.Text + "', '" + qteMedTb.Text + "','" + fabMedCbx.SelectedValue.ToString() + "', '" + expMedDate.Value.Date + "')" ;
-            SqlCommand cmd = new SqlCommand(Req, Con);
-                    cmd.ExecuteNonQuery();
-                    MessageBox.Show("Médicaments Ajouté Avec succes");
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
+        }
 
-                    Con.Close();
-                    afficher();
-                    reinitialiser();
-                }
-                catch (Exception Ex)
-                {
-                    MessageBox.Show(Ex.Message);
-                }
+        // Bouton "Modifier"
+        private void guna2Button2_Click(object sender, EventArgs e)
+        {
+            if (cle == 0) { MessageBox.Show("Sélectionnez le médicament à modifier"); return; }
+            decimal prix; int qte;
+            if (!champsValides(out prix, out qte)) return;
+            try
+            {
+                // Bug d'origine : UPDATE sans WHERE -> modifiait TOUS les médicaments.
+                Db.Execute(
+                    "UPDATE MedicamentTbl SET MedNom=@nom, MedPrix=@prix, MedQte=@qte, MedFab=@fab, MedExp=@exp WHERE MedNum=@id",
+                    Db.P("@nom", nomMedTb.Text.Trim()),
+                    Db.P("@prix", prix),
+                    Db.P("@qte", qte),
+                    Db.P("@fab", Convert.ToInt32(fabMedCbx.SelectedValue)),
+                    Db.P("@exp", expMedDate.Value.Date),
+                    Db.P("@id", cle));
+                MessageBox.Show("Médicament modifié avec succès");
+                afficher();
+                reinitialiser();
             }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
 
         private void supprimerBtn_Click(object sender, EventArgs e)
         {
-            if (Cle == 0)
+            if (cle == 0) { MessageBox.Show("Sélectionnez le médicament à supprimer"); return; }
+            if (MessageBox.Show("Supprimer ce médicament ?", "Confirmation",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try
             {
-                MessageBox.Show("Selectionner le Fabricant à supprimer");
+                // Bug d'origine : nom de table erroné (MedicamentsTbl).
+                Db.Execute("DELETE FROM MedicamentTbl WHERE MedNum=@id", Db.P("@id", cle));
+                MessageBox.Show("Médicament supprimé avec succès");
+                afficher();
+                reinitialiser();
             }
-            else
-            {
-                try
-                {
-                    Con.Open();
-                    string Req = "delete from MedicamentsTbl where MedNum=" + Cle + "";
-                    SqlCommand cmd = new SqlCommand(Req, Con);
-                    cmd.ExecuteNonQuery();
-                    MessageBox.Show("Médicament Supprimé Avec succes");
-
-                    Con.Close();
-                    afficher();
-                    reinitialiser();
-                }
-                catch (Exception Ex)
-                {
-                    MessageBox.Show(Ex.Message);
-                }
-            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
 
         private void reinitialiserBtn_Click(object sender, EventArgs e)
         {
             reinitialiser();
         }
-        int Cle = 0;
+
         private void medicamentsDGV_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
-            nomMedTb.Text = medicamentsDGV.SelectedRows[0].Cells[1].Value.ToString();
-            prixMedTb.Text = medicamentsDGV.SelectedRows[0].Cells[2].Value.ToString();
-            qteMedTb.Text = medicamentsDGV.SelectedRows[0].Cells[3].Value.ToString();           
+            if (e.RowIndex < 0) return;
+            var row = medicamentsDGV.Rows[e.RowIndex];
+            if (row.Cells[0].Value == null) { cle = 0; return; }
 
-            fabMedCbx.SelectedValue = medicamentsDGV.SelectedRows[0].Cells[4].Value.ToString();
-            expMedDate.Text = medicamentsDGV.SelectedRows[0].Cells[5].Value.ToString();
-            if (nomMedTb.Text == "")
-                Cle = 0;
-            else
-                Cle = Convert.ToInt32(medicamentsDGV.SelectedRows[0].Cells[0].Value.ToString());
+            cle = Convert.ToInt32(row.Cells[0].Value);
+            nomMedTb.Text = Convert.ToString(row.Cells[1].Value);
+            prixMedTb.Text = Convert.ToString(row.Cells[2].Value);
+            qteMedTb.Text = Convert.ToString(row.Cells[3].Value);
+            fabMedCbx.SelectedValue = row.Cells[4].Value;
+            DateTime exp;
+            if (DateTime.TryParse(Convert.ToString(row.Cells[5].Value), out exp))
+                expMedDate.Value = exp;
         }
 
         private void label3_Click(object sender, EventArgs e)
         {
-            Fabricants Fab = new Fabricants();
-            Fab.Show();
+            new Fabricants().Show();
             this.Hide();
         }
 
         private void pictureBox6_Click(object sender, EventArgs e)
         {
-            this.Close();
+            Application.Exit();
         }
     }
 }

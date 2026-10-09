@@ -1,49 +1,51 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Data.OleDb;
-using System.Data.SqlClient;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System;
 using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
-
 
 namespace GestionPharmacy
-{ 
+{
     public partial class Fabricants : Form
     {
-       
+        private int cle = 0;   // FabNum de la ligne sélectionnée (0 = aucune)
+
         public Fabricants()
         {
             InitializeComponent();
             afficher();
             reinitialiser();
         }
-        SqlConnection Con = new SqlConnection(@"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=|DataDirectory|\\Mapharmacie.accdb");
+
         private void reinitialiser()
         {
-           
             nomFabTb.Text = "";
             addFabTb.Text = "";
             telFabTb.Text = "";
             descFabTb.Text = "";
-            Cle = 0;
+            cle = 0;
         }
+
         private void afficher()
         {
-            Con.Open();
-            string Req = "Select * From FabricantTbl";
-            SqlDataAdapter sda = new SqlDataAdapter(Req, Con);
-            SqlCommandBuilder builder = new SqlCommandBuilder(sda);
-            var ds = new DataSet();
-            sda.Fill(ds);
-            fabricantsDGV.DataSource = ds.Tables[0];
-            Con.Close();
+            try
+            {
+                // Bug d'origine : ce formulaire utilisait une chaîne OLEDB (Access)
+                // avec un SqlConnection -> plantait systématiquement à l'ouverture.
+                fabricantsDGV.DataSource = Db.Table(
+                    "SELECT FabNum, FabNom, FabAd, FabDesc, FabTel FROM FabricantTbl ORDER BY FabNom");
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
+
+        private bool champsValides()
+        {
+            if (nomFabTb.Text.Trim() == "" || addFabTb.Text.Trim() == "" ||
+                descFabTb.Text.Trim() == "" || telFabTb.Text.Trim() == "")
+            {
+                MessageBox.Show("Complétez les informations manquantes");
+                return false;
+            }
+            return true;
+        }
+
         private void ReinitialiseBTN_Click(object sender, EventArgs e)
         {
             reinitialiser();
@@ -51,121 +53,86 @@ namespace GestionPharmacy
 
         private void Fabricants_Load(object sender, EventArgs e)
         {
-
         }
 
         private void ajouterBtn_Click(object sender, EventArgs e)
         {
-            if (nomFabTb.Text == "" || addFabTb.Text == "" || descFabTb.Text == "" || telFabTb.Text == "")
+            if (!champsValides()) return;
+            try
             {
-                MessageBox.Show("Completez les Informations Manquantes");
+                Db.Execute(
+                    "INSERT INTO FabricantTbl (FabNom, FabAd, FabDesc, FabTel) VALUES (@nom, @ad, @desc, @tel)",
+                    Db.P("@nom", nomFabTb.Text.Trim()),
+                    Db.P("@ad", addFabTb.Text.Trim()),
+                    Db.P("@desc", descFabTb.Text.Trim()),
+                    Db.P("@tel", telFabTb.Text.Trim()));
+                MessageBox.Show("Fabricant ajouté avec succès");
+                afficher();
+                reinitialiser();
             }
-            else
-            {
-                try
-                {
-                    Con.Open();
-                    string Req = "Insert into FabricantTbl values( '" + nomFabTb.Text + "', '" + addFabTb.Text + "', '" + descFabTb.Text + "','" + telFabTb.Text + "')";
-                    SqlCommand cmd = new SqlCommand(Req, Con);
-                    cmd.ExecuteNonQuery();
-                    MessageBox.Show("Fabricant Ajouté Avec succes");
-
-                    Con.Close();
-                    afficher();
-                    reinitialiser();
-                }
-                catch (Exception Ex)
-                {
-                    MessageBox.Show(Ex.Message);
-                }
-            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
 
         private void modifierBtn_Click(object sender, EventArgs e)
         {
-            if (nomFabTb.Text == "" || addFabTb.Text == "" || descFabTb.Text == "" || telFabTb.Text == "")
+            if (cle == 0) { MessageBox.Show("Sélectionnez le fabricant à modifier"); return; }
+            if (!champsValides()) return;
+            try
             {
-                MessageBox.Show("Information Manquante");
+                // Bugs d'origine : UPDATE sans WHERE (tous les fabricants modifiés)
+                // et le téléphone écrasait l'adresse (FabAd affecté deux fois).
+                Db.Execute(
+                    "UPDATE FabricantTbl SET FabNom=@nom, FabAd=@ad, FabDesc=@desc, FabTel=@tel WHERE FabNum=@id",
+                    Db.P("@nom", nomFabTb.Text.Trim()),
+                    Db.P("@ad", addFabTb.Text.Trim()),
+                    Db.P("@desc", descFabTb.Text.Trim()),
+                    Db.P("@tel", telFabTb.Text.Trim()),
+                    Db.P("@id", cle));
+                MessageBox.Show("Fabricant modifié avec succès");
+                afficher();
+                reinitialiser();
             }
-            else
-            {
-                try
-                {
-                    Con.Open();
-                    string Req = "Update FabricantTbl set FabNom='" + nomFabTb.Text + "', FabAd='" + addFabTb.Text + "', FabDesc='" + descFabTb.Text + "', FabAd='" + telFabTb.Text + "'";
-                    SqlCommand cmd = new SqlCommand(Req, Con);
-                    cmd.ExecuteNonQuery();
-                    MessageBox.Show("Fabricant Modifié Avec succes");
-
-                    Con.Close();
-                    afficher();
-                    reinitialiser();
-                }
-                catch (Exception Ex)
-                {
-                    MessageBox.Show(Ex.Message);
-                }
-            }
-        
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
 
         private void supprimerBtn_Click(object sender, EventArgs e)
         {
-            if (Cle == 0)
+            if (cle == 0) { MessageBox.Show("Sélectionnez le fabricant à supprimer"); return; }
+            if (MessageBox.Show("Supprimer ce fabricant ? Ses médicaments doivent d'abord être réaffectés.",
+                    "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try
             {
-                MessageBox.Show("Selectionner le Fabricant à supprimer");
+                // Bug d'origine : nom de table erroné (FabriquantTbl).
+                Db.Execute("DELETE FROM FabricantTbl WHERE FabNum=@id", Db.P("@id", cle));
+                MessageBox.Show("Fabricant supprimé avec succès");
+                afficher();
+                reinitialiser();
             }
-            else
-            {
-                try
-                {
-                    Con.Open();
-                    string Req = "delete from FabriquantTbl where FabNum=" + Cle + "";
-                    SqlCommand cmd = new SqlCommand(Req, Con);
-                    cmd.ExecuteNonQuery();
-                    MessageBox.Show("Fabricant Supprimé Avec succes");
-
-                    Con.Close();
-                    afficher();
-                    reinitialiser();
-                }
-                catch (Exception Ex)
-                {
-                    MessageBox.Show(Ex.Message);
-                }
-            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
-        int Cle = 0;
+
         private void fabricantsDGV_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
-            
-           
-                nomFabTb.Text = fabricantsDGV.SelectedRows[0].Cells[1].Value.ToString();
-                addFabTb.Text = fabricantsDGV.SelectedRows[0].Cells[2].Value.ToString();
-                descFabTb.Text = fabricantsDGV.SelectedRows[0].Cells[3].Value.ToString();
-                telFabTb.Text = fabricantsDGV.SelectedRows[0].Cells[4].Value.ToString();
+            if (e.RowIndex < 0) return;
+            var row = fabricantsDGV.Rows[e.RowIndex];
+            if (row.Cells[0].Value == null) { cle = 0; return; }
 
-                if (nomFabTb.Text == "")
-                { 
-                    Cle = 0;
-                }
-                else 
-                { 
-                    Cle = Convert.ToInt32(fabricantsDGV.SelectedRows[0].Cells[0].Value.ToString());
-                }
-            }
+            cle = Convert.ToInt32(row.Cells[0].Value);
+            nomFabTb.Text = Convert.ToString(row.Cells[1].Value);
+            addFabTb.Text = Convert.ToString(row.Cells[2].Value);
+            descFabTb.Text = Convert.ToString(row.Cells[3].Value);
+            telFabTb.Text = Convert.ToString(row.Cells[4].Value);
+        }
 
         private void label3_Click(object sender, EventArgs e)
         {
-            Medicaments Med = new Medicaments();
-            Med.Show();
+            new Medicaments().Show();
             this.Hide();
         }
 
         private void pictureBox6_Click(object sender, EventArgs e)
         {
-            this.Close();
+            Application.Exit();
         }
     }
 }
-
